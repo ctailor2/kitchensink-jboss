@@ -154,14 +154,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Jackson for JSON processing in REST tests -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <version>2.16.1</version>
-            <scope>test</scope>
-        </dependency>
-
         <!-- Now we declare any tools needed -->
 
         <!-- Annotation processor to generate the JPA metamodel classes for

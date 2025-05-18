@@ -1,32 +1,29 @@
 package org.jboss.as.quickstarts.kitchensink.test;
 
-import static org.junit.Assert.*;
+import jakarta.json.*;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-import org.junit.Before;
-import org.junit.Test;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import org.jboss.as.quickstarts.kitchensink.member.model.Member;
+import static org.junit.Assert.*;
 
 public class MemberRestIT {
 
     private static final String BASE_URL = "http://localhost:8080/kitchensink/rest/members";
     private HttpClient client;
-    private ObjectMapper mapper;
 
     @Before
     public void setup() {
         client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
-        mapper = new ObjectMapper();
     }
 
     @Test
@@ -39,21 +36,25 @@ public class MemberRestIT {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, response.statusCode());
 
-        JsonNode members = mapper.readTree(response.body());
-        assertTrue(members.isArray());
+        JsonReader jsonReader = Json.createReader(new StringReader(response.body()));
+        JsonArray members = jsonReader.readArray();
+        assertTrue(members.size() >= 0);
+        jsonReader.close();
     }
 
     @Test
     public void testCreateMember() throws IOException, InterruptedException {
-        Member member = new Member();
-        member.setName("REST Test User");
-        member.setEmail("rest" + System.currentTimeMillis() + "@test.com");
-        member.setPhoneNumber("1234567890");
+        String email = "rest" + System.currentTimeMillis() + "@test.com";
+        JsonObject member = Json.createObjectBuilder()
+                .add("name", "REST Test User")
+                .add("email", email)
+                .add("phoneNumber", "1234567890")
+                .build();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(member)))
+                .POST(HttpRequest.BodyPublishers.ofString(member.toString()))
                 .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -63,22 +64,25 @@ public class MemberRestIT {
     @Test
     public void testCreateInvalidMember() throws IOException, InterruptedException {
         // Test with invalid email
-        Member member = new Member();
-        member.setName("Invalid User");
-        member.setEmail("invalid-email");
-        member.setPhoneNumber("1234567890");
+        JsonObject member = Json.createObjectBuilder()
+                .add("name", "Invalid User")
+                .add("email", "invalid-email")
+                .add("phoneNumber", "1234567890")
+                .build();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(member)))
+                .POST(HttpRequest.BodyPublishers.ofString(member.toString()))
                 .build();
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         assertEquals(400, response.statusCode());
 
-        JsonNode errorResponse = mapper.readTree(response.body());
-        assertTrue(errorResponse.has("email"));
+        JsonReader jsonReader = Json.createReader(new StringReader(response.body()));
+        JsonObject errorResponse = jsonReader.readObject();
+        assertTrue(errorResponse.containsKey("email"));
+        jsonReader.close();
     }
 
     @Test
@@ -86,51 +90,57 @@ public class MemberRestIT {
         String email = "duplicate" + System.currentTimeMillis() + "@test.com";
 
         // Create first member
-        Member member1 = new Member();
-        member1.setName("First User");
-        member1.setEmail(email);
-        member1.setPhoneNumber("1234567890");
+        JsonObject member1 = Json.createObjectBuilder()
+                .add("name", "First User")
+                .add("email", email)
+                .add("phoneNumber", "1234567890")
+                .build();
 
         HttpRequest request1 = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(member1)))
+                .POST(HttpRequest.BodyPublishers.ofString(member1.toString()))
                 .build();
 
         client.send(request1, HttpResponse.BodyHandlers.ofString());
 
         // Try to create second member with same email
-        Member member2 = new Member();
-        member2.setName("Second User");
-        member2.setEmail(email);
-        member2.setPhoneNumber("0987654321");
+        JsonObject member2 = Json.createObjectBuilder()
+                .add("name", "Second User")
+                .add("email", email)
+                .add("phoneNumber", "0987654321")
+                .build();
 
         HttpRequest request2 = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(member2)))
+                .POST(HttpRequest.BodyPublishers.ofString(member2.toString()))
                 .build();
 
         HttpResponse<String> response = client.send(request2, HttpResponse.BodyHandlers.ofString());
         assertEquals(409, response.statusCode());
 
-        JsonNode errorResponse = mapper.readTree(response.body());
-        assertTrue(errorResponse.has("email"));
-        assertEquals("Email taken", errorResponse.get("email").asText());
+        JsonReader jsonReader = Json.createReader(new StringReader(response.body()));
+        JsonObject errorResponse = jsonReader.readObject();
+        assertTrue(errorResponse.containsKey("email"));
+        assertEquals("Email taken", errorResponse.getString("email"));
+        jsonReader.close();
     }
 
     @Test
     public void testGetMemberById() throws IOException, InterruptedException {
         // First create a member
-        Member member = new Member();
-        member.setName("Get By ID Test");
-        member.setEmail("getbyid" + System.currentTimeMillis() + "@test.com");
-        member.setPhoneNumber("1234567890");
+        String email = "getbyid" + System.currentTimeMillis() + "@test.com";
+        JsonObject member = Json.createObjectBuilder()
+                .add("name", "Get By ID Test")
+                .add("email", email)
+                .add("phoneNumber", "1234567890")
+                .build();
 
         HttpRequest createRequest = HttpRequest.newBuilder()
                 .uri(URI.create(BASE_URL))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(member)))
+                .POST(HttpRequest.BodyPublishers.ofString(member.toString()))
                 .build();
 
         HttpResponse<String> createResponse = client.send(createRequest, HttpResponse.BodyHandlers.ofString());
@@ -143,13 +153,16 @@ public class MemberRestIT {
                 .build();
 
         HttpResponse<String> listResponse = client.send(listRequest, HttpResponse.BodyHandlers.ofString());
-        JsonNode members = mapper.readTree(listResponse.body());
+        JsonReader jsonReader = Json.createReader(new StringReader(listResponse.body()));
+        JsonArray members = jsonReader.readArray();
+        jsonReader.close();
 
         // Find the member we just created
         Long memberId = null;
-        for (JsonNode memberNode : members) {
-            if (memberNode.get("email").asText().equals(member.getEmail())) {
-                memberId = memberNode.get("id").asLong();
+        for (JsonValue memberValue : members) {
+            JsonObject memberObject = memberValue.asJsonObject();
+            if (memberObject.getString("email").equals(email)) {
+                memberId = Long.valueOf(memberObject.getInt("id"));
                 break;
             }
         }
@@ -164,10 +177,13 @@ public class MemberRestIT {
         HttpResponse<String> getResponse = client.send(getRequest, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, getResponse.statusCode());
 
-        JsonNode retrievedMember = mapper.readTree(getResponse.body());
-        assertEquals(member.getName(), retrievedMember.get("name").asText());
-        assertEquals(member.getEmail(), retrievedMember.get("email").asText());
-        assertEquals(member.getPhoneNumber(), retrievedMember.get("phoneNumber").asText());
+        jsonReader = Json.createReader(new StringReader(getResponse.body()));
+        JsonObject retrievedMember = jsonReader.readObject();
+        jsonReader.close();
+
+        assertEquals(member.getString("name"), retrievedMember.getString("name"));
+        assertEquals(member.getString("email"), retrievedMember.getString("email"));
+        assertEquals(member.getString("phoneNumber"), retrievedMember.getString("phoneNumber"));
     }
 
     @Test
