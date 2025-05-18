@@ -18,18 +18,19 @@ package org.jboss.as.quickstarts.kitchensink.test;
 
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
+import jakarta.json.JsonValue;
+import jakarta.json.stream.JsonParser;
+import org.junit.Assert;
+import org.junit.Test;
 
-import java.util.logging.Logger;
-
+import java.io.StringReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-
-import org.jboss.as.quickstarts.kitchensink.model.Member;
-import org.junit.Assert;
-import org.junit.Test;
+import java.util.Random;
+import java.util.logging.Logger;
 
 public class RemoteMemberRegistrationIT {
 
@@ -57,21 +58,38 @@ public class RemoteMemberRegistrationIT {
 
     @Test
     public void testRegister() throws Exception {
-        Member newMember = new Member();
-        newMember.setName("Jane Doe");
-        newMember.setEmail("jane@mailinator.com");
-        newMember.setPhoneNumber("2125551234");
+        String email = String.format("jane-%s@mailinator.com", new Random().nextInt());
+        String name = "Jane Doe";
+        String phoneNumber = "2125551234";
         JsonObject json = Json.createObjectBuilder()
-                .add("name", "Jane Doe")
-                .add("email", "jane@mailinator.com")
-                .add("phoneNumber", "2125551234").build();
-        HttpRequest request = HttpRequest.newBuilder(getHTTPEndpoint())
+                .add("name", name)
+                .add("email", email)
+                .add("phoneNumber", phoneNumber).build();
+        HttpRequest createRequest = HttpRequest.newBuilder(getHTTPEndpoint())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json.toString()))
                 .build();
-        HttpResponse response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-        Assert.assertEquals(200, response.statusCode());
-        Assert.assertEquals("", response.body().toString() );
+        HttpResponse createResponse = HttpClient.newHttpClient().send(createRequest, HttpResponse.BodyHandlers.ofString());
+        Assert.assertEquals(200, createResponse.statusCode());
+        Assert.assertEquals("", createResponse.body().toString());
+
+        HttpRequest getMembersRequest = HttpRequest.newBuilder(getHTTPEndpoint())
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+        HttpResponse getMembersResponse = HttpClient.newHttpClient().send(getMembersRequest, HttpResponse.BodyHandlers.ofString());
+        JsonParser jsonParser = Json.createParser(new StringReader(getMembersResponse.body().toString()));
+        jsonParser.next();
+        JsonObject addedMemberJson = jsonParser.getArrayStream()
+                .filter((jsonValue) -> jsonValue.asJsonObject().getString("email").equals(email))
+                .findFirst()
+                .map(JsonValue::asJsonObject)
+                .orElseThrow();
+        Assert.assertEquals(200, getMembersResponse.statusCode());
+        Assert.assertNotNull(addedMemberJson.getInt("id"));
+        Assert.assertEquals(name, addedMemberJson.getString("name"));
+        Assert.assertEquals(email, addedMemberJson.getString("email"));
+        Assert.assertEquals(phoneNumber, addedMemberJson.getString("phoneNumber"));
     }
 
 }
