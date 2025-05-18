@@ -1,5 +1,6 @@
 package org.jboss.as.quickstarts.kitchensink.test;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,6 +24,7 @@ public class MemberSeleniumIT {
 
     @Before
     public void setup() {
+        WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless"); // Run in headless mode
         driver = new ChromeDriver(options);
