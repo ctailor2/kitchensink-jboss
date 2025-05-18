@@ -1,7 +1,12 @@
 package org.jboss.as.quickstarts.kitchensink.test;
 
 import io.github.bonigarcia.wdm.WebDriverManager;
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonValue;
+import jakarta.json.stream.JsonParser;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.openqa.selenium.By;
@@ -12,6 +17,7 @@ import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
+import java.io.StringReader;
 import java.util.List;
 
 import static org.junit.Assert.assertTrue;
@@ -43,7 +49,8 @@ public class MemberSeleniumIT {
     public void testSuccessfulMemberRegistration() {
         // Fill in the registration form
         driver.findElement(By.id("reg:name")).sendKeys("John Doe");
-        driver.findElement(By.id("reg:email")).sendKeys("john" + System.currentTimeMillis() + "@test.com");
+        String email = "john" + System.currentTimeMillis() + "@test.com";
+        driver.findElement(By.id("reg:email")).sendKeys(email);
         driver.findElement(By.id("reg:phoneNumber")).sendKeys("1234567890");
 
         // Submit the form
@@ -56,7 +63,7 @@ public class MemberSeleniumIT {
 
         // Verify member appears in the table
         WebElement memberTable = driver.findElement(By.className("simpletablestyle"));
-        assertTrue(memberTable.getText().contains("John Doe"));
+        assertTrue(memberTable.getText().contains(email));
     }
 
     @Test
@@ -130,41 +137,18 @@ public class MemberSeleniumIT {
         // Wait for error message
         WebElement errorMessage = wait.until(ExpectedConditions.presenceOfElementLocated(
                 By.cssSelector(".invalid")));
-        assertTrue(errorMessage.getText().contains("Email taken"));
+        assertTrue(errorMessage.getText().contains("Unique index or primary key violation"));
     }
 
     @Test
-    public void testMemberListing() {
+    public void testRestUrlLink() {
         // Register a new member
-        String uniqueName = "Test User " + System.currentTimeMillis();
-        driver.findElement(By.id("reg:name")).sendKeys(uniqueName);
-        driver.findElement(By.id("reg:email")).sendKeys("test" + System.currentTimeMillis() + "@test.com");
-        driver.findElement(By.id("reg:phoneNumber")).sendKeys("1234567890");
-        driver.findElement(By.id("reg:register")).click();
-
-        // Wait for success message
-        wait.until(ExpectedConditions.presenceOfElementLocated(
-                By.cssSelector(".messages")));
-
-        // Verify member table exists and contains the new member
-        WebElement memberTable = driver.findElement(By.className("simpletablestyle"));
-        List<WebElement> rows = memberTable.findElements(By.tagName("tr"));
-        boolean found = false;
-        for (WebElement row : rows) {
-            if (row.getText().contains(uniqueName)) {
-                found = true;
-                break;
-            }
-        }
-        assertTrue("New member should appear in the table", found);
-    }
-
-    @Test
-    public void testRestLinkGeneration() {
-        // Register a new member
-        driver.findElement(By.id("reg:name")).sendKeys("REST Test User");
-        driver.findElement(By.id("reg:email")).sendKeys("rest" + System.currentTimeMillis() + "@test.com");
-        driver.findElement(By.id("reg:phoneNumber")).sendKeys("1234567890");
+        String name = "REST Test User";
+        driver.findElement(By.id("reg:name")).sendKeys(name);
+        String email = "rest" + System.currentTimeMillis() + "@test.com";
+        driver.findElement(By.id("reg:email")).sendKeys(email);
+        String phoneNumber = "1234567890";
+        driver.findElement(By.id("reg:phoneNumber")).sendKeys(phoneNumber);
         driver.findElement(By.id("reg:register")).click();
 
         // Wait for success message
@@ -173,16 +157,47 @@ public class MemberSeleniumIT {
 
         // Find the REST URL in the table
         WebElement memberTable = driver.findElement(By.className("simpletablestyle"));
-        List<WebElement> links = memberTable.findElements(By.tagName("a"));
-        boolean foundRestLink = false;
-        for (WebElement link : links) {
-            String href = link.getAttribute("href");
-            if (href != null && href.contains("/rest/members/")) {
-                foundRestLink = true;
-                assertTrue(href.matches(".*/rest/members/\\d+"));
-                break;
-            }
-        }
-        assertTrue("REST link should be present in the table", foundRestLink);
+        List<WebElement> rows = memberTable.findElements(By.tagName("tr"));
+        WebElement memberTableRow = rows.stream().filter((row) -> row.getText().contains(email)).findFirst().orElseThrow();
+        List<WebElement> rowData = memberTableRow.findElements(By.tagName("td"));
+        WebElement restUrlDatum = rowData.get(rowData.size() - 1);
+        restUrlDatum.click();
+        String memberRestUrlJson = driver.findElement(By.cssSelector("body pre")).getText();
+        JsonParser jsonParser = Json.createParser(new StringReader(memberRestUrlJson));
+        jsonParser.next();
+        JsonObject jsonObject = jsonParser.getObject();
+        Assert.assertEquals(name, jsonObject.getString("name"));
+        Assert.assertEquals(email, jsonObject.getString("email"));
+        Assert.assertEquals(phoneNumber, jsonObject.getString("phoneNumber"));
+    }
+
+    @Test
+    public void testMembersLink() {
+        // Register a new member
+        String name = "REST Test User";
+        driver.findElement(By.id("reg:name")).sendKeys(name);
+        String email = "rest" + System.currentTimeMillis() + "@test.com";
+        driver.findElement(By.id("reg:email")).sendKeys(email);
+        String phoneNumber = "1234567890";
+        driver.findElement(By.id("reg:phoneNumber")).sendKeys(phoneNumber);
+        driver.findElement(By.id("reg:register")).click();
+
+        // Wait for success message
+        wait.until(ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector(".messages")));
+
+        // Click the members link
+        driver.findElement(By.linkText("/rest/members")).click();
+        String membersJson = driver.findElement(By.cssSelector("body pre")).getText();
+        JsonParser jsonParser = Json.createParser(new StringReader(membersJson));
+        jsonParser.next();
+        JsonObject jsonObject = jsonParser.getArrayStream()
+                .filter((jsonValue) -> jsonValue.asJsonObject().getString("email").equals(email))
+                .findFirst()
+                .map(JsonValue::asJsonObject)
+                .orElseThrow();;
+        Assert.assertEquals(name, jsonObject.getString("name"));
+        Assert.assertEquals(email, jsonObject.getString("email"));
+        Assert.assertEquals(phoneNumber, jsonObject.getString("phoneNumber"));
     }
 }
